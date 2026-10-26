@@ -1,0 +1,13 @@
+# Tested together with Python 3.11. NumPy 1.x is required by LK_Info_Flow.
+numpy==1.26.4
+scipy==1.15.3
+pandas==2.2.3
+matplotlib==3.10.0
+scikit-learn==1.6.1
+threadpoolctl==3.7.0
+statsmodels==0.14.5
+tigramite==5.2.10.1
+pyEDM==2.5.7
+dcor==0.6
+# Author's fix for source/lag indexing; the PyPI 3.1.2.1 wheel mixes these axes.
+LK-Info-Flow @ git+https://github.com/YinengRong/LKIF.git@95c088ef8cc5e5dab2c6279158e98338ee51124a#subdirectory=codes/python

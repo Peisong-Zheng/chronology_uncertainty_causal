@@ -1,0 +1,25 @@
+# Agent workspace and machine-specific Python environments.
+/tmp/
+/.venv/
+/.venv-gpu/
+/venv/
+
+# Python and notebook caches.
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.pytest_cache/
+.DS_Store
+
+# Windows generates authoritative inputs/results locally from the checked-in code.
+# Keep generated member arrays, native scans, caches, logs and Mac archives local.
+/data/*
+!/data/README.md
+/figures/*
+!/figures/README.md
+
+# Local credentials and editor metadata are not project inputs.
+.env
+.env.*
+!.env.example
+.vscode/

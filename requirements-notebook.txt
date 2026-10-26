@@ -1,0 +1,7 @@
+# Optional notebook interface/execution tools; scientific dependencies remain in requirements.txt.
+# These notebook-tool versions still need an installation check on the Windows computer.
+-r requirements.txt
+ipykernel==6.29.5
+nbformat==5.10.4
+nbclient==0.10.2
+jupyterlab==4.4.0
