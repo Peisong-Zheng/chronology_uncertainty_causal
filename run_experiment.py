@@ -1,7 +1,9 @@
-r"""Launch one experiment with single-thread numerical libraries and a saved log.
+r"""Launch experiments sequentially with single-thread libraries and saved logs.
 
 Windows: .venv\Scripts\python.exe run_experiment.py
 Edit EXPERIMENT below and the scientific settings in that experiment first.
+Optional FOLLOWUP_EXPERIMENTS run in order after the preceding script succeeds.
+Each script has its own log; a nonzero exit stops the remaining sequence.
 The launcher stays in the foreground; keep its terminal open until it finishes.
 Run only one instance of an experiment at a time because its output folder is shared.
 On Windows it temporarily prevents automatic system sleep while it runs.
@@ -18,6 +20,7 @@ import sys
 
 
 EXPERIMENT = "02_check_causal_pipeline.py"  # Main study; use 02_3_check_uncertainty_escalation.py for four levels.
+FOLLOWUP_EXPERIMENTS = ["02_3_check_uncertainty_escalation.py"]  # Complete the other levels after 02 succeeds.
 NUMERICAL_THREADS = 1                     # Per-process BLAS/OpenMP threads; workers are set in the experiment.
 
 ROOT = Path(__file__).resolve().parent
@@ -49,23 +52,33 @@ def stop_child(process):
     if process.poll() is not None:
         return
     if os.name == "nt":
-        process.send_signal(signal.CTRL_BREAK_EVENT)
+        try:
+            process.send_signal(signal.CTRL_BREAK_EVENT)
+        except OSError:
+            # A launcher attached only to pipes may have no console for CTRL_BREAK.
+            # Recheck before taskkill: the child can exit while signal delivery fails.
+            if process.poll() is None:
+                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], check=False)
+            process.wait()
+            return
     else:
         os.killpg(process.pid, signal.SIGTERM)
     try:
         process.wait(timeout=15)
     except subprocess.TimeoutExpired:
         if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], check=False)
+            if process.poll() is None:
+                subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], check=False)
         else:
             os.killpg(process.pid, signal.SIGKILL)
         process.wait()
 
 
-def run_experiment():
-    script = ROOT / EXPERIMENT
+def run_experiment(experiment=None):
+    """Launch one script; calls without an argument still use EXPERIMENT."""
+    script = ROOT / (EXPERIMENT if experiment is None else experiment)
     if not script.is_file() or script.suffix != ".py" or script.parent != ROOT:
-        raise ValueError("EXPERIMENT must name a Python script in the project root.")
+        raise ValueError("Each experiment must name a Python script in the project root.")
     if NUMERICAL_THREADS != 1:
         raise ValueError("Keep one numerical thread per worker for the current process-pool design.")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
@@ -117,12 +130,21 @@ def run_experiment():
 
 
 def main():
+    experiments = [EXPERIMENT, *FOLLOWUP_EXPERIMENTS]
     keep_awake = False
     try:
         keep_awake = set_windows_system_awake(True)
         if keep_awake:
             print("Windows automatic system sleep is temporarily prevented; display sleep remains allowed.", flush=True)
-        return run_experiment()
+        # Keep the sleep request active across script boundaries and stop on failure.
+        for position, experiment in enumerate(experiments, start=1):
+            if len(experiments) > 1:
+                print(f"Experiment {position}/{len(experiments)}: {experiment}", flush=True)
+            return_code = run_experiment(experiment)
+            if return_code != 0:
+                print(f"Launcher stopped after {experiment} with exit code {return_code}.", flush=True)
+                return return_code
+        return 0
     finally:
         if keep_awake:
             set_windows_system_awake(False)

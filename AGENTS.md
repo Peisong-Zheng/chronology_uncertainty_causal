@@ -25,7 +25,7 @@ This is a scientific research project, not a general-purpose application. Keep t
 | `02_1_check_coupling_strength.py` | Original-uniform-record native-score ranking under K=1/2/4, with three process seeds. Former 03. |
 | `02_2_inspect_ccm_lags.ipynb` | CCM embedding/library/lag-window parameter investigation. Former 04. |
 | `02_3_check_uncertainty_escalation.py` | All four levels and 16 ordered pairs; imports completed level 2 from 02. Former 05. |
-| `run_experiment.py` | Portable launcher: one numerical thread per worker, console plus saved log. |
+| `run_experiment.py` | Portable sequential launcher: one numerical thread per worker, console plus one saved log per script. |
 | `benchmark_workers.py` | Windows 16/24/32-worker throughput comparison on 96 fixed prepared02 inputs. |
 | `verify_optimizations.py` | Portable same-input comparison of uncached/fresh native calls and optimized calls. |
 | `explore_cuda.py` | Optional CUDA hardware/matrix-operation probe; **not** a GPU causal estimator. |
@@ -117,12 +117,12 @@ Do not replace this with 31 calls at `sample=100`: that does not preserve the re
 
 ### Multiprocessing and scale
 
-- 02 and 02_3 default to 24 outer workers as a **candidate** for the 14900KF, not a proven optimum.
+- 02 and 02_3 use 32 outer workers on this 14900KF, selected from the measured 16/24/32-worker comparison below. Recheck throughput and memory pressure if the workload or hardware changes.
 - Use one BLAS/OpenMP thread per worker. The formal launcher sets these variables before importing numerical packages.
 - Keep an outer process pool; do not substitute threads. The current PyEDM sequential path uses mutable module-level worker data.
 - Keep PyEDM internal parallelism off. Repeated nested pools can waste resources and memory.
 - Keep worker functions at module scope and preserve `if __name__ == "__main__"` for Windows spawn.
-- Benchmark16/24/32 on the target PC with 96 identical inputs. Observe memory/commit and paging in Task Manager. Select the fastest configuration with acceptable memory pressure; do not pick 32 from the logical CPU count alone.
+- Benchmark 16/24/32 on the target PC with 96 identical inputs. Observe memory/commit and paging. Select the fastest configuration with acceptable memory pressure; do not pick 32 from the logical CPU count alone.
 - Main case counts are derived from configuration:02 is 16×3×N;02_3 is 4×16×3×N, including imported level 2. N = 10 gives 480 and 1920 pairs respectively.
 
 ## Windows environment and launch procedure
@@ -135,7 +135,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-`requirements.txt` fixes the scientific versions. NumPy 1.26.4 is intentional for LKIF compatibility. LKIF is installed from Git commit `95c088ef8cc5e5dab2c6279158e98338ee51124a`; do not replace it with the known problematic PyPI wheel. A fresh Windows installation still needs to be tested on the actual machine.
+`requirements.txt` fixes the scientific versions. NumPy 1.26.4 is intentional for LKIF compatibility. LKIF is installed from Git commit `95c088ef8cc5e5dab2c6279158e98338ee51124a`; do not replace it with the known problematic PyPI wheel. The local Windows `.venv` was installed with 64-bit Python 3.11.7 on 2026-10-26; pinned requirements, the LKIF commit and `pip check` were verified. Notebook installation remains optional and unverified.
 
 For notebooks, optionally install and register the project kernel:
 
@@ -147,16 +147,16 @@ For notebooks, optionally install and register the project kernel:
 Recommended first Windows workflow:
 
 1. Run `.\.venv\Scripts\python.exe verify_optimizations.py`. This is a few-case numerical check, not a full experiment.
-2. In 02 set `PREPARE_ONLY=True`; leave `RUN_BASELINES=True` and `RESUME=True`. Run the launcher below. It computes the small baseline set and prepares all chronology inputs, then stops before the ensemble fits.
+2. In 02 set `PREPARE_ONLY=True`; leave `RUN_BASELINES=True` and `RESUME=True`. Set the launcher's `FOLLOWUP_EXPERIMENTS=[]` during preparation. Run the launcher below. It computes the small baseline set and prepares all chronology inputs, then stops before the ensemble fits.
 3. Run `.\.venv\Scripts\python.exe benchmark_workers.py`. Choose the worker count from measured throughput and memory behavior. The96-case benchmark is real causal computation and may take several minutes per worker setting.
-4. Set `PREPARE_ONLY=False` and the selected `N_WORKERS` in 02; launch it again. It reuses the matching prepared baseline and completes level 2.
-5. Keep the same chronology counts in 02_3. Change the launcher's `EXPERIMENT` to `02_3_check_uncertainty_escalation.py`, then launch to calculate the other levels and import the completed local 02 level 2.
+4. Set `PREPARE_ONLY=False` in 02 and the selected `N_WORKERS` in both 02 and 02_3; keep matching chronology counts. With `EXPERIMENT="02_check_causal_pipeline.py"` and `FOLLOWUP_EXPERIMENTS=["02_3_check_uncertainty_escalation.py"]`, launch once to reuse the prepared baseline, complete level 2, then calculate the other levels automatically.
+5. To launch only 02_3 after a completed local 02, set `EXPERIMENT="02_3_check_uncertainty_escalation.py"` and `FOLLOWUP_EXPERIMENTS=[]`. It imports the completed local level-2 results.
 
 ```powershell
 .\.venv\Scripts\python.exe run_experiment.py
 ```
 
-The launcher uses its own interpreter, creates a timestamped log under `data/logs/`, and streams output to the terminal. Keep that terminal open and run only one instance per experiment output folder. Ctrl+C requests termination of the child process group; completed member files remain. Check `run_status.json`, not an old log selection, for the latest saved progress. On Windows the launcher temporarily requests that automatic system sleep be prevented, then releases that request on exit. Display sleep remains allowed; no persistent power setting is changed. If this API fails, the launcher warns and continues.
+The launcher uses its own interpreter, creates a timestamped log per script under `data/logs/`, and streams output to the terminal. The current default sequence is 02 followed by 02_3; any nonzero exit stops the remaining sequence. Keep that terminal open and run only one instance per experiment output folder. Ctrl+C requests termination of the child process group; completed member files remain. If Windows cannot deliver the console signal, the launcher falls back to `taskkill /T /F` for the live child tree. Check `run_status.json`, not an old log selection, for the latest saved progress. On Windows the launcher temporarily prevents automatic system sleep across the whole sequence, then releases the request on exit. Display sleep remains allowed; no persistent power setting is changed. If this API fails, the launcher warns and continues.
 
 The strength script and lag notebook are optional branches; they need not be rerun before every 02 experiment.
 
@@ -204,6 +204,21 @@ The Mac implementation check used two fixed 1401-row inputs (linear and independ
 
 Observed single-process times were approximately 18.7→4.9 seconds and 17.7→3.8 seconds for PCMCI+, with a one-time 16.8-second null preparation. CCM changed 49.2→47.0 seconds and 51.2→49.9 seconds. These checks suggest about 1.3× combined improvement, **not** a 4× improvement of the whole workflow.
 
-Fresh setup, resume, failure retention and metadata rejection were checked using small mocked workflows. A separate real-estimator integration check used two spawned processes and reduced test-only settings: both scripts saved eight successful directional rows. Launcher logging, exit codes and temporary sleep-control lifecycle were checked locally or with mocks. Source and notebook-cell syntax checks passed; notebook execution was not repeated. Windows throughput, 32-worker viability, fresh package/notebook installation, Windows process control and CUDA execution still require acceptance on the target PC.
+The earlier setup, resume, failure-retention and metadata-rejection checks used small mocked workflows. A separate real-estimator integration check used two spawned processes and reduced test-only settings: both scripts saved eight successful directional rows. Launcher logging, exit codes and temporary sleep-control lifecycle were checked locally or with mocks. Source and notebook-cell syntax checks passed; notebook execution was not repeated.
+
+Windows acceptance on 2026-10-26 passed the complete two-case optimization comparison, with exact numerical equality, in `data/benchmarks/optimization_checks/20261026T214439840630Z/report.json`. Both accurate-age baselines produced all 48 directional rows with status `ok`, and all 480 level-2 chronology inputs were ready.
+
+The same 96 prepared input pairs gave these Windows worker measurements:
+
+| Workers | Wall time (minutes) | Input pairs/hour |
+|---|---:|---:|
+| 16 | 9.65 | 596.96 |
+| 24 | 7.90 | 728.78 |
+| 32 | 7.50 | 768.20 |
+| 32, repeat | 7.56 | 762.12 |
+
+All 88,182 fingerprinted components across the 96 pairs matched exactly between worker counts and the completed 32-worker repeat. Minimum available physical memory at 32 workers was about 11.9 GiB, with no sustained paging pressure observed. The user stopped the second 24-worker measurement; it is incomplete and is not additional throughput evidence. These measurements selected 32 workers for production.
+
+The production sequence was launched with `PREPARE_ONLY=False` and 32 workers; this acceptance record does **not** establish that the full study has finished. Read each experiment's current `run_status.json` for completion. Sequential launch, signal-failure fallback and sleep-control lifecycle passed mocked checks. A real benchmark process tree was terminated with `taskkill`; native Windows Ctrl+C handling still needs acceptance. Notebook installation/execution and CUDA execution also remain unverified on this PC.
 
 Retain the original scientific outputs if a future optimization fails the numerical comparison. Investigate discrepancies rather than changing significance thresholds or dropping difficult cases.
