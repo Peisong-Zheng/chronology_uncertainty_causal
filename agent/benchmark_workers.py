@@ -17,9 +17,12 @@ import json
 import multiprocessing
 import os
 import platform
+import sys
 import time
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
+# Direct execution from agent/ must still find the project's shared toolbox.
+sys.path.insert(0, str(ROOT))
 # Set these before scientific imports, including imports made by spawned workers.
 for thread_name in ["OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS",
                     "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS", "BLIS_NUM_THREADS"]:

@@ -15,7 +15,7 @@ __pycache__/
 # Keep generated member arrays, native scans, caches, logs and Mac archives local.
 /data/*
 !/data/README.md
-/figures/*
+# /figures/*
 !/figures/README.md
 
 # Local credentials and editor metadata are not project inputs.

@@ -21,7 +21,7 @@ REPEATS = 5            # Timed repetitions after one warm-up for each backend.
 SEED = 20261009        # Fixed input for comparing CPU and GPU arithmetic on this machine.
 RTOL = 1e-9           # Required relative agreement of the solved coefficient vector.
 ATOL = 1e-10          # Absolute agreement tolerance near zero.
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 RESULT_DIR = ROOT / "data" / "benchmarks" / "cuda_exploration"
 
 

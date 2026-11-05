@@ -25,18 +25,21 @@ This is a scientific research project, not a general-purpose application. Keep t
 | `02_1_check_coupling_strength.py` | Original-uniform-record native-score ranking under K=1/2/4, with three process seeds. Former 03. |
 | `02_2_inspect_ccm_lags.ipynb` | CCM embedding/library/lag-window parameter investigation. Former 04. |
 | `02_3_check_uncertainty_escalation.py` | All four levels and 16 ordered pairs; imports completed level 2 from 02. Former 05. |
-| `run_experiment.py` | Portable sequential launcher: one numerical thread per worker, console plus one saved log per script. |
-| `benchmark_workers.py` | Windows 16/24/32-worker throughput comparison on 96 fixed prepared02 inputs. |
-| `verify_optimizations.py` | Portable same-input comparison of uncached/fresh native calls and optimized calls. |
-| `explore_cuda.py` | Optional CUDA hardware/matrix-operation probe; **not** a GPU causal estimator. |
+| `02_4_check_sampling_sensitivity.py` | Accurate-age density, irregularity, asynchronous sampling and age-gradient controls; 492 input pairs. |
+| `agent/run_experiment.py` | Portable sequential launcher: one numerical thread per worker, console plus one saved log per script. |
+| `agent/benchmark_workers.py` | Windows 16/24/32-worker throughput comparison on 96 fixed prepared02 inputs. |
+| `agent/verify_optimizations.py` | Portable same-input comparison of uncached/fresh native calls and optimized calls. |
+| `agent/explore_cuda.py` | Optional CUDA hardware/matrix-operation probe; **not** a GPU causal estimator. |
 
 Branch numbering expresses a relationship to 02, not a requirement to run every notebook before the main experiment. Production calculations do not import code or data from `tmp/`.
+
+`agent/` contains maintained, versioned support scripts and requirements. Temporary agent work still belongs in `tmp/`. Scientific scripts and notebooks remain at the project root; `toolbox/`, `data/` and `figures/` retain their existing locations.
 
 ## Scientific question and scope
 
 The main question is how equal or different chronology-uncertainty types assigned to two records affect retained causal arrows and native method scores. The ensemble provides within-record support. One highly consistent ensemble does not establish causal correctness across independently generated climate histories.
 
-Current controls deliberately keep sampling, proxy values, dynamics and estimator settings fixed. There is no main-study systematic age shift, feedback network, five-variable network, tipping experiment, measurement-noise sweep, or sampling-sensitivity sweep. Three-variable common forcing/confounding and a real-data case remain later work.
+The main chronology study deliberately keeps sampling, proxy values, dynamics and estimator settings fixed. Experiment 02_4 is a separate accurate-age sampling sensitivity branch. There is no main-study systematic age shift, feedback network, five-variable network, tipping experiment or measurement-noise sweep. Three-variable common forcing/confounding and a real-data case remain later work.
 
 ### Time and data conventions
 
@@ -47,7 +50,7 @@ Current controls deliberately keep sampling, proxy values, dynamics and estimato
 - Native process step and analysis step are 20 years (`0.020 kyr`). The retained process spans 30 kyr, 1501 points.
 - Analysis uses the fixed 29–1 kyr window, 1401 points. Every accepted chronology member must cover the same grid. No member-specific cropping or extrapolation.
 - The accurate-age references are: (1) original uniform data, cropped only; (2) irregular observations with their accurate ages, interpolated onto the same grid. There is no separate downsampled baseline.
-- Main irregular sampling uses 27.5-year pre-rounding target gaps at both ends with 10% jitter; native retained gaps are 20/40 years. This mild sampling was chosen to separate chronology effects. Age-dependent thinning is deferred sensitivity work.
+- Main irregular sampling uses 27.5-year pre-rounding target gaps at both ends with 10% jitter; native retained gaps are 20/40 years. This mild sampling was chosen to separate chronology effects. The separate 02_4 branch tests stronger sampling changes, including age-dependent density, without changing this main-study setting.
 
 ### Dynamics and truth
 
@@ -101,6 +104,17 @@ Use the existing packages. Do not replace an algorithm with a hand-written estim
 
 ## Performance implementation
 
+### Sampling sensitivity branch (02_4)
+
+- The detailed comparison contract is in `agent/02_4_sampling_sensitivity_plan.md`. Use the existing three process forms and one process realization per form, exact ages, zero measurement noise and unchanged estimators. Ten A/B mask groups are sampling repetitions, not independent process histories or chronology members.
+- Density controls use synchronous regular 20/40/80/160-year gaps. The irregular controls have exactly 351 observations over 29–1 kyr, including both endpoints: 175 gaps each of 60/100 years (CV 0.25) or 20/140 years (CV 0.75). Compare AA, BB, AB, BA at each fixed gap multiset.
+- Old-sparse and young-sparse controls relocate the same long/short intervals, using paired Gumbel draws and log-weight slope +2/-2 in interval order. Keep X/Y synchronous (AA, BB) for this second stage. Save actual density by BP-age bins; the weight is not a prescribed linear density in physical age.
+- Total default case count is 12 density + 240 irregular/asynchronous + 240 age-gradient = 492. All inputs are interpolated to the same 1401-point grid, without extrapolation. The 20-year control exactly recovers the original uniform input.
+- Save complete native arrays, nested results and GC scientific fit fields as per-method JSON gzip files; the eight-row per-case edge table is the final commit. Retain explicit failures. Regenerated inputs, scientific settings, packages, implementation revision and numerical platform must match before resume.
+- Read committed edge tables with pandas `float_precision="round_trip"` when resuming. The default CSV parser can change the last floating-point digit when rebuilding aggregate tables. This precision setting applies to result loading; the validated estimator input-loading path remains unchanged.
+- Native-score paired differences require all component scores to be finite and successful. Report usable/requested counts and descriptive medians/IQRs. Correct graph recovery divides by requested cases, excludes unresolved evidence and never silently removes failed/pending cases.
+- 02_4 uses the existing 32-worker setting, single numerical threads, native GPDC null cache and CCM object reuse. Observe memory pressure during its run; do not repeat the completed 24-worker benchmark.
+
 ### GPDC null cache
 
 `prepare_gpdc_null(filename, sample_sizes=[T], sig_samples=..., seed=...)` calls the native generator once in the parent. Pass its returned path to `run_pcmciplus(..., null_dist_filename=...)`.
@@ -132,31 +146,31 @@ Use 64-bit Python 3.11 and Git for Windows. Run commands from the project root. 
 ```powershell
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install -r agent\requirements.txt
 ```
 
-`requirements.txt` fixes the scientific versions. NumPy 1.26.4 is intentional for LKIF compatibility. LKIF is installed from Git commit `95c088ef8cc5e5dab2c6279158e98338ee51124a`; do not replace it with the known problematic PyPI wheel. The local Windows `.venv` was installed with 64-bit Python 3.11.7 on 2026-10-26; pinned requirements, the LKIF commit and `pip check` were verified. Notebook installation remains optional and unverified.
+`agent/requirements.txt` fixes the scientific versions. NumPy 1.26.4 is intentional for LKIF compatibility. LKIF is installed from Git commit `95c088ef8cc5e5dab2c6279158e98338ee51124a`; do not replace it with the known problematic PyPI wheel. The local Windows `.venv` was installed with 64-bit Python 3.11.7 on 2026-10-26; pinned requirements, the LKIF commit and `pip check` were verified. Notebook installation remains optional and unverified.
 
 For notebooks, optionally install and register the project kernel:
 
 ```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-notebook.txt
+.\.venv\Scripts\python.exe -m pip install -r agent\requirements-notebook.txt
 .\.venv\Scripts\python.exe -m ipykernel install --user --name chronology-causal --display-name "Python 3 (project .venv)"
 ```
 
 Recommended first Windows workflow:
 
-1. Run `.\.venv\Scripts\python.exe verify_optimizations.py`. This is a few-case numerical check, not a full experiment.
+1. Run `.\.venv\Scripts\python.exe agent\verify_optimizations.py`. This is a few-case numerical check, not a full experiment.
 2. In 02 set `PREPARE_ONLY=True`; leave `RUN_BASELINES=True` and `RESUME=True`. Set the launcher's `FOLLOWUP_EXPERIMENTS=[]` during preparation. Run the launcher below. It computes the small baseline set and prepares all chronology inputs, then stops before the ensemble fits.
-3. Run `.\.venv\Scripts\python.exe benchmark_workers.py`. Choose the worker count from measured throughput and memory behavior. The96-case benchmark is real causal computation and may take several minutes per worker setting.
+3. Run `.\.venv\Scripts\python.exe agent\benchmark_workers.py`. Choose the worker count from measured throughput and memory behavior. The96-case benchmark is real causal computation and may take several minutes per worker setting.
 4. Set `PREPARE_ONLY=False` in 02 and the selected `N_WORKERS` in both 02 and 02_3; keep matching chronology counts. With `EXPERIMENT="02_check_causal_pipeline.py"` and `FOLLOWUP_EXPERIMENTS=["02_3_check_uncertainty_escalation.py"]`, launch once to reuse the prepared baseline, complete level 2, then calculate the other levels automatically.
 5. To launch only 02_3 after a completed local 02, set `EXPERIMENT="02_3_check_uncertainty_escalation.py"` and `FOLLOWUP_EXPERIMENTS=[]`. It imports the completed local level-2 results.
 
 ```powershell
-.\.venv\Scripts\python.exe run_experiment.py
+.\.venv\Scripts\python.exe agent\run_experiment.py
 ```
 
-The launcher uses its own interpreter, creates a timestamped log per script under `data/logs/`, and streams output to the terminal. The current default sequence is 02 followed by 02_3; any nonzero exit stops the remaining sequence. Keep that terminal open and run only one instance per experiment output folder. Ctrl+C requests termination of the child process group; completed member files remain. If Windows cannot deliver the console signal, the launcher falls back to `taskkill /T /F` for the live child tree. Check `run_status.json`, not an old log selection, for the latest saved progress. On Windows the launcher temporarily prevents automatic system sleep across the whole sequence, then releases the request on exit. Display sleep remains allowed; no persistent power setting is changed. If this API fails, the launcher warns and continues.
+The launcher uses its own interpreter, creates a timestamped log per script under `data/logs/`, and streams output to the terminal. The current launcher selects 02_4 alone. To run the chronology sequence, explicitly select 02 followed by 02_3 as above; any nonzero exit stops the remaining sequence. Keep that terminal open and run only one instance per experiment output folder. Ctrl+C requests termination of the child process group; completed member files remain. If Windows cannot deliver the console signal, the launcher falls back to `taskkill /T /F` for the live child tree. Check `run_status.json`, not an old log selection, for the latest saved progress. On Windows the launcher temporarily prevents automatic system sleep across the whole sequence, then releases the request on exit. Display sleep remains allowed; no persistent power setting is changed. If this API fails, the launcher warns and continues.
 
 The strength script and lag notebook are optional branches; they need not be rerun before every 02 experiment.
 
@@ -172,7 +186,7 @@ The strength script and lag notebook are optional branches; they need not be rer
 
 ## Files to synchronize
 
-Git should contain scripts, source notebooks without embedded generated output, toolbox, requirements, this guide and the small directory README files. This repository does not require a transferred Mac dataset to start the Windows pipeline.
+Git should contain scripts, source notebooks without embedded generated output, toolbox, the maintained `agent/` support scripts and requirements, this guide and the small directory README files. This repository does not require a transferred Mac dataset to start the Windows pipeline.
 
 Keep `.venv/`,`.venv-gpu/`, `tmp/`, generated data, figures, caches, logs and historical archives out of Git. Ignoring a file is not deleting it. If a cloud folder is used instead of Git, configure its exclusions separately; `.gitignore` does not control a cloud-sync application.
 
@@ -190,8 +204,8 @@ If a compatible NVIDIA driver and CUDA Toolkit 12.x are installed, use a separat
 
 ```powershell
 py -3.11 -m venv .venv-gpu
-.\.venv-gpu\Scripts\python.exe -m pip install -r requirements-gpu.txt
-.\.venv-gpu\Scripts\python.exe explore_cuda.py
+.\.venv-gpu\Scripts\python.exe -m pip install -r agent\requirements-gpu.txt
+.\.venv-gpu\Scripts\python.exe agent\explore_cuda.py
 ```
 
 The optional requirements pin CuPy 13.6 to remain compatible with the existing NumPy 1.x line. The probe checks CUDA availability, compares a float64 RBF-covariance/Cholesky solve and records timings including transfers. **Its speed ratio is not an end-to-end PCMCI/CCM speedup.** It does not implement a new causal estimator.
@@ -219,6 +233,8 @@ The same 96 prepared input pairs gave these Windows worker measurements:
 
 All 88,182 fingerprinted components across the 96 pairs matched exactly between worker counts and the completed 32-worker repeat. Minimum available physical memory at 32 workers was about 11.9 GiB, with no sustained paging pressure observed. The user stopped the second 24-worker measurement; it is incomplete and is not additional throughput evidence. These measurements selected 32 workers for production.
 
-The production sequence was launched with `PREPARE_ONLY=False` and 32 workers; this acceptance record does **not** establish that the full study has finished. Read each experiment's current `run_status.json` for completion. Sequential launch, signal-failure fallback and sleep-control lifecycle passed mocked checks. A real benchmark process tree was terminated with `taskkill`; native Windows Ctrl+C handling still needs acceptance. Notebook installation/execution and CUDA execution also remain unverified on this PC.
+The production sequence completed with `PREPARE_ONLY=False` and 32 workers: the saved status files report 480/480 pairs for 02 and 1920/1920 for 02_3, including 480 reused level-2 pairs, with no recorded run errors. Read each experiment's current `run_status.json` for subsequent progress. Sequential launch, signal-failure fallback and sleep-control lifecycle passed mocked checks. A real benchmark process tree was terminated with `taskkill`; native Windows Ctrl+C handling still needs acceptance. Notebook installation/execution and CUDA execution also remain unverified on this PC.
 
 Retain the original scientific outputs if a future optimization fails the numerical comparison. Investigate discrepancies rather than changing significance thresholds or dropping difficult cases.
+
+Sampling-branch preflight on 2026-11-04 passed: 492 unique inputs, fixed gap multisets/endpoints, shared masks, and exact recovery of the existing 02 original inputs by the 20-year control. Two full-setting cases (linear CV 0.75 AB; nonlinear CV 0.25 old-sparse AA) matched exactly between direct execution and two spawned workers across all eight complete native payloads and directional rows, excluding runtime only. The check included the full CCM 100×31×2 lag arrays, 100×2 nulls and GC regression fields. Sixteen isolated checks also passed for failure retention, committed outputs, resume/configuration guards and serialization errors. Reports are under `data/benchmarks/sampling_checks/20261104/`. The 32-worker production run completed all 492/492 pairs in 3739.757 seconds (62.329 minutes), with all 3936 directional rows successful and all 1440 paired score contrasts usable. Minimum available physical memory was 9.67 GiB. The full artifact audit passed, including all 1968 native archives. After fixing last-digit CSV result-loading drift with round-trip parsing, an actual resume preserved the bytes and modification times of all 2460 committed member/native files. The final comparison is `artifact_audit_20261104T215527447629Z.json` in the same reports directory. The earlier audit retains the full production runtime; the current run_status records the latest resume invocation.

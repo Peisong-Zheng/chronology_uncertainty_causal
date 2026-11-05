@@ -54,6 +54,85 @@ def sample_irregular_indices(
     return np.asarray(indices, dtype=int)
 
 
+def sampling_indices_from_gaps(
+    age, *, gap_steps, order="random", gradient_strength=2.0, rng=None,
+):
+    """Place a fixed set of sampling gaps on a regular old-to-young age grid.
+
+    gap_steps contains positive integer numbers of native grid steps. Their
+    sum must equal len(age)-1, so both endpoints, the sample count, and the
+    complete gap histogram are fixed. Only sampling indices are returned;
+    ages and proxy values are neither moved nor modified.
+
+    'given' retains the supplied order. 'random' permutes the gaps uniformly.
+    'old_sparse' and 'young_sparse' require exactly two distinct gap lengths
+    and place the fixed number of long gaps using weighted sampling without
+    replacement. Interval positions run from 0 (old end) to 1 (young end).
+    Old-sparse log weights are gradient_strength * (1 - 2 * position), with
+    the opposite sign for young-sparse. Strength is finite, nonnegative and
+    dimensionless; this is a gradient in interval order, not a prescribed
+    function of actual BP age, which also depends on preceding gap lengths.
+
+    For two gap lengths, randomized modes rank the same per-position Gumbel
+    draws plus their log weights; random uses zero log weights. Reusing an
+    integer seed (or fresh Generators in the same state) pairs the randomness
+    across these modes. At zero strength all three modes agree exactly.
+    rng accepts a NumPy Generator, an integer seed, or None.
+    """
+    age, _ = _check_age_grid(age)
+    # Validate original scalar types before conversion: neither 1.0 nor True
+    # is an integer sampling-gap specification, even inside a mixed list.
+    gaps = np.asarray(gap_steps, dtype=object)
+    if gaps.ndim != 1 or gaps.size == 0:
+        raise ValueError("gap_steps must be a nonempty one-dimensional sequence.")
+    if any(isinstance(value, (bool, np.bool_)) or not isinstance(value, (int, np.integer))
+           for value in gaps):
+        raise ValueError("gap_steps must contain integers, without rounding or boolean coercion.")
+    if any(value <= 0 for value in gaps):
+        raise ValueError("Every sampling gap must be a positive number of native steps.")
+    # Python integer summation avoids overflow before the span is checked.
+    if sum(int(value) for value in gaps) != len(age) - 1:
+        raise ValueError("gap_steps must sum exactly to len(age)-1 to retain both endpoints.")
+    gaps = np.asarray(gaps, dtype=np.intp)
+    if not isinstance(order, str) or order not in {"random", "old_sparse", "young_sparse", "given"}:
+        raise ValueError("order must be 'random', 'old_sparse', 'young_sparse', or 'given'.")
+    if (isinstance(gradient_strength, (bool, np.bool_))
+            or not isinstance(gradient_strength, (int, float, np.integer, np.floating))):
+        raise ValueError("gradient_strength must be a finite nonnegative real number.")
+    try:
+        strength = float(gradient_strength)
+    except (OverflowError, ValueError) as error:
+        raise ValueError("gradient_strength must be a finite nonnegative real number.") from error
+    if not np.isfinite(strength) or strength < 0:
+        raise ValueError("gradient_strength must be a finite nonnegative real number.")
+
+    gap_lengths = np.unique(gaps)
+    if order in {"old_sparse", "young_sparse"} and len(gap_lengths) != 2:
+        raise ValueError("Age-gradient sampling requires exactly two distinct gap lengths.")
+    if order == "given" or len(gap_lengths) == 1:
+        ordered_gaps = gaps.copy()
+    elif len(gap_lengths) == 2:
+        rng = np.random.default_rng(rng)
+        interval_position = np.linspace(0.0, 1.0, len(gaps))
+        log_weights = np.zeros(len(gaps))
+        if order == "old_sparse":
+            log_weights = strength * (1 - 2 * interval_position)
+        elif order == "young_sparse":
+            log_weights = strength * (2 * interval_position - 1)
+        scores = rng.gumbel(size=len(gaps)) + log_weights
+        n_long = int(np.count_nonzero(gaps == gap_lengths[-1]))
+        long_positions = np.argsort(scores, kind="stable")[-n_long:]
+        ordered_gaps = np.full(len(gaps), gap_lengths[0], dtype=np.intp)
+        ordered_gaps[long_positions] = gap_lengths[-1]
+    else:
+        ordered_gaps = np.random.default_rng(rng).permutation(gaps)
+
+    indices = np.empty(len(gaps) + 1, dtype=np.intp)
+    indices[0] = 0
+    indices[1:] = np.cumsum(ordered_gaps, dtype=np.intp)
+    return indices
+
+
 def make_age_uncertainty(
     age,
     *,

@@ -1,6 +1,6 @@
 """Check native GPDC caching and CCM object reuse on this computer.
 
-Run ``python verify_optimizations.py`` before a large Windows experiment.
+Run ``python agent/verify_optimizations.py`` from the project root before a large Windows experiment.
 This uses the complete 100-library, 31-lag CCM screen on two 1401-point
 records. Allow several minutes; it does not run any chronology ensembles.
 Outputs go to data/benchmarks/optimization_checks/<UTC timestamp>/.
@@ -25,6 +25,10 @@ import json
 import platform
 import sys
 import time
+
+ROOT = Path(__file__).resolve().parents[1]
+# Direct execution from agent/ must still find the project's shared toolbox.
+sys.path.insert(0, str(ROOT))
 
 import numpy as np
 import pandas as pd
@@ -66,9 +70,6 @@ CCM_SURROGATES = 100            # Cut-and-swap surrogates for each direction.
 CCM_LAG_STEPS = list(range(-15, 16))  # All 31 target shifts, from -300 to +300 yr.
 CCM_LAG_LIBRARIES = 100         # Matched random libraries at every target shift.
 CCM_LAG_SIGN_THRESHOLD = 0.90   # Existing temporal-consistency decision rule.
-
-ROOT = Path(__file__).resolve().parent
-
 
 def generate_inputs():
     """Generate coupled and independent records without external data files."""

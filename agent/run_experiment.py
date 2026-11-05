@@ -1,6 +1,6 @@
 r"""Launch experiments sequentially with single-thread libraries and saved logs.
 
-Windows: .venv\Scripts\python.exe run_experiment.py
+Windows (from the project root): .venv\Scripts\python.exe agent\run_experiment.py
 Edit EXPERIMENT below and the scientific settings in that experiment first.
 Optional FOLLOWUP_EXPERIMENTS run in order after the preceding script succeeds.
 Each script has its own log; a nonzero exit stops the remaining sequence.
@@ -19,11 +19,11 @@ import subprocess
 import sys
 
 
-EXPERIMENT = "02_check_causal_pipeline.py"  # Main study; use 02_3_check_uncertainty_escalation.py for four levels.
-FOLLOWUP_EXPERIMENTS = ["02_3_check_uncertainty_escalation.py"]  # Complete the other levels after 02 succeeds.
+EXPERIMENT = "02_4_check_sampling_sensitivity.py"  # Current accurate-age sampling sensitivity branch.
+FOLLOWUP_EXPERIMENTS = []                 # Run only this branch; the completed chronology study is separate.
 NUMERICAL_THREADS = 1                     # Per-process BLAS/OpenMP threads; workers are set in the experiment.
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 LOG_DIR = ROOT / "data" / "logs"
 
 
@@ -76,9 +76,9 @@ def stop_child(process):
 
 def run_experiment(experiment=None):
     """Launch one script; calls without an argument still use EXPERIMENT."""
-    script = ROOT / (EXPERIMENT if experiment is None else experiment)
-    if not script.is_file() or script.suffix != ".py" or script.parent != ROOT:
-        raise ValueError("Each experiment must name a Python script in the project root.")
+    script = (ROOT / (EXPERIMENT if experiment is None else experiment)).resolve()
+    if not script.is_file() or script.suffix != ".py" or script.parent not in [ROOT, ROOT / "agent"]:
+        raise ValueError("Each experiment must name a Python script in the project root or agent/.")
     if NUMERICAL_THREADS != 1:
         raise ValueError("Keep one numerical thread per worker for the current process-pool design.")
     LOG_DIR.mkdir(parents=True, exist_ok=True)
