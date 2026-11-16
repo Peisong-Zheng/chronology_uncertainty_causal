@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 from threadpoolctl import threadpool_limits
 
+from toolbox.plotting import add_panel_labels
 from toolbox.process import generate_process
 from toolbox.observation import (sample_irregular_indices, simulate_observations,
                                  make_age_uncertainty, draw_age_ensemble)
@@ -61,7 +62,7 @@ GPDC_OPTIMIZE_KERNEL = False   # False fixes the package's RBF + white-noise ker
 CCM_E = 3                     # Embedding coordinates; chosen in the separate accurate-age pilot.
 CCM_TAU = -1                  # Backward embedding interval: 1 step = 20 years; history spans 40 years.
 CCM_EXCLUSION_RADIUS = 10      # Exclude temporally adjacent neighbors within 200 years.
-CCM_LIBRARY_FRACTION = 0.80    # Fraction of usable embedded rows in the single fixed library.
+CCM_LIBRARY_SIZE = 300         # Embedded states per library, shared by original, null and lag fits.
 CCM_SAMPLES = 10               # Random libraries averaged at that one library size.
 CCM_SURROGATES = 100           # Random cut-and-swap records for each direction; p resolution 1/101.
 CCM_LAG_STEPS = list(range(-15, 16))  # Target shifts from -300 to +300 years, including zero.
@@ -183,8 +184,6 @@ def analyze_pair(series, *, seed, label, diagnostics_name="method_diagnostics.js
     """Call each existing estimator and retain failures explicitly."""
     edge_tables = []
     details = {}
-    effective_length = len(series) - (CCM_E - 1) * abs(CCM_TAU)
-    library_size = int(CCM_LIBRARY_FRACTION * effective_length)
     for method in METHODS:
         started = time.perf_counter()
         try:
@@ -199,7 +198,7 @@ def analyze_pair(series, *, seed, label, diagnostics_name="method_diagnostics.js
                 result = run_lkif(series, max_lag=MAX_LAG, alpha=ALPHA)
             elif method == "CCM":
                 result = run_ccm(series, E=CCM_E, tau=CCM_TAU,
-                                 exclusion_radius=CCM_EXCLUSION_RADIUS, lib_size=library_size,
+                                 exclusion_radius=CCM_EXCLUSION_RADIUS, lib_size=CCM_LIBRARY_SIZE,
                                  sample=CCM_SAMPLES, n_surrogates=CCM_SURROGATES,
                                  seed=seed, alpha=ALPHA, lag_steps=CCM_LAG_STEPS,
                                  n_libraries=CCM_LAG_LIBRARIES,
@@ -251,7 +250,7 @@ def run_baselines():
     parameters["packages"] = {name: version(name) for name in
                               ["numpy", "scipy", "pandas", "scikit-learn", "tigramite", "pyEDM", "LK-Info-Flow", "statsmodels", "dcor"]}
     parameters["execution_environment"] = execution_environment()
-    parameters["analysis_revision"] = "native_null_cache_and_ccm_object_reuse_v1"
+    parameters["analysis_revision"] = "native_null_cache_and_ccm_neighbor_reuse_v2"
     parameter_path = DATA_DIR / "baseline_parameters.json"
     # A completed baseline may be reused when only chronology settings change.
     if RESUME and parameter_path.exists():
@@ -438,6 +437,7 @@ def plot_process_truth(processes):
     names = ["linear", "nonlinear", "independent"]
     z = np.linspace(-3, 3, 301)  # Held X in units of its theoretical stationary SD.
     fig, axes = plt.subplots(2, 3, figsize=(12, 7), height_ratios=[1, 1.3])
+    add_panel_labels(axes, x=-0.065)
     response_limit = 0.0
     for column, name in enumerate(names):
         truth = processes[name]["truth"]
@@ -497,6 +497,7 @@ def plot_process_truth(processes):
 def plot_baseline_results(baselines, reference, title):
     """Use the same score limits for the two paired baseline figures."""
     fig, axes = plt.subplots(1, 4, figsize=(16, 5.2))
+    add_panel_labels(axes, x=-0.065)
     processes_order = ["linear", "nonlinear", "independent"]
     for ax, method in zip(axes, METHODS):
         p_labels = {}
@@ -543,13 +544,14 @@ def plot_baseline_results(baselines, reference, title):
     fig.text(0.5, 0.015, "Hollow markers include CCM lag-screen rejection. CCM score and p0 remain the original Tp=0 results.",
              ha="center", fontsize=8)
     fig.suptitle(title + f" ({1000 * GRID_STEP:g}-yr grid)"
-                 + "\nReplicate 0; scores differ by method")
+                 + f"\nReplicate 0; scores differ by method; CCM L={CCM_LIBRARY_SIZE}")
     return fig
 
 
 def plot_ccm_baseline_lags(uniform_results, irregular_results):
     """Inspect saved lag curves without repeating CCM or changing its Tp=0 test."""
     fig, axes = plt.subplots(2, 3, figsize=(14, 8), sharex=True, sharey="col")
+    add_panel_labels(axes, x=-0.065)
     baseline_tables = [("original_uniform", "Original uniform", uniform_results),
                        ("irregular_accurate", "Irregular, accurate ages", irregular_results)]
     for row, (baseline_name, title, results) in enumerate(baseline_tables):
@@ -593,7 +595,7 @@ def plot_ccm_baseline_lags(uniform_results, irregular_results):
                         Line2D([], [], color="tab:orange", label="Y → X"),
                         Patch(color="0.7", alpha=0.3, label="Historical embedding span")],
                loc="lower center", ncol=3, bbox_to_anchor=(0.5, 0.035), frameon=False)
-    fig.suptitle(f"CCM temporal screen: {CCM_LAG_LIBRARIES} matched libraries; both directions checked independently", fontsize=13)
+    fig.suptitle(f"CCM temporal screen: {CCM_LAG_LIBRARIES} matched libraries of {CCM_LIBRARY_SIZE} states; both directions checked independently", fontsize=13)
     fig.text(0.5, 0.015, "Bands: library SD, not confidence. Scan uses common anchors; original p0 does not test the selected peak.",
              ha="center", fontsize=9)
     return fig
@@ -608,6 +610,7 @@ def plot_checks(uniform_results, irregular_results, sampling_examples):
     processes_order = ["linear", "nonlinear", "independent"]
 
     fig, axes = plt.subplots(2, 3, figsize=(13, 6), sharex=True)
+    add_panel_labels(axes, x=-0.065)
     middle = (ANALYSIS_OLD + ANALYSIS_YOUNG) / 2
     for column, process_name in enumerate(processes_order):
         original = sampling_examples[process_name]["uniform"]
@@ -652,7 +655,7 @@ def check_saved_baselines(*, require_complete=True):
         "SPACING_JITTER", "MEASUREMENT_NOISE_RATIO", "ANALYSIS_OLD", "ANALYSIS_YOUNG",
         "GRID_STEP", "MAX_LAG", "GC_ORDER", "ALPHA", "N_REPLICATES", "GPDC_NULL_SAMPLES",
         "GPDC_OPTIMIZE_KERNEL", "CCM_E", "CCM_TAU", "CCM_EXCLUSION_RADIUS",
-        "CCM_LIBRARY_FRACTION", "CCM_SAMPLES", "CCM_SURROGATES",
+        "CCM_LIBRARY_SIZE", "CCM_SAMPLES", "CCM_SURROGATES",
         "CCM_LAG_STEPS", "CCM_LAG_LIBRARIES", "CCM_LAG_SIGN_THRESHOLD",
     ]
     for name in names:
@@ -661,7 +664,7 @@ def check_saved_baselines(*, require_complete=True):
     for package, saved_version in saved["packages"].items():
         if version(package) != saved_version:
             raise ValueError(f"{package} changed since the baseline run; rerun both stages.")
-    if (saved.get("analysis_revision") != "native_null_cache_and_ccm_object_reuse_v1"
+    if (saved.get("analysis_revision") != "native_null_cache_and_ccm_neighbor_reuse_v2"
             or saved.get("execution_environment") != execution_environment()):
         raise ValueError("Baseline numerical implementation/platform changed; start a fresh local run.")
     if require_complete:
@@ -942,6 +945,7 @@ def plot_ccm_filter_comparison(comparison):
     names = [item[0] for item in AGE_SCENARIOS]
     positions = np.arange(len(names))
     fig, axes = plt.subplots(3, 2, figsize=(17, 10), sharex=True, sharey=True)
+    add_panel_labels(axes, x=-0.065)
     for row, process in enumerate(["linear", "nonlinear", "independent"]):
         for column, source in enumerate(["x", "y"]):
             ax = axes[row, column]
@@ -1082,7 +1086,7 @@ def run_age_comparison():
     parameters["packages"]["threadpoolctl"] = version("threadpoolctl")
     parameters["numerical_threads_per_worker"] = 1
     parameters["execution_environment"] = execution_environment()
-    parameters["analysis_revision"] = "native_null_cache_and_ccm_object_reuse_v1"
+    parameters["analysis_revision"] = "native_null_cache_and_ccm_neighbor_reuse_v2"
     parameters["member_run"] = "Resume only complete members from this configuration; scientific failures are retained."
     parameter_path = DATA_DIR / "age_comparison_parameters.json"
     if parameter_path.exists():
@@ -1179,6 +1183,7 @@ def plot_age_checks(
 
     # Figure 04: observed center errors and accepted chronology intervals.
     fig, axes = plt.subplots(4, 2, figsize=(12, 10), sharex=True, sharey=True)
+    add_panel_labels(axes, x=-0.065)
     for row, kind in enumerate(["C", "L", "E", "J"]):
         for column, record in enumerate(["x", "y"]):
             ax = axes[row, column]
@@ -1223,6 +1228,7 @@ def plot_age_checks(
     accurate = examples["accurate"]
     limits = [(float(accurate["age"].max()), float(accurate["age"].min())), (15.6, 14.4)]
     fig, axes = plt.subplots(2, 2, figsize=(13, 6), sharex="col", sharey="row")
+    add_panel_labels(axes, x=-0.065)
     for row, record in enumerate(["x", "y"]):
         for column, age_limits in enumerate(limits):
             ax = axes[row, column]
@@ -1247,6 +1253,7 @@ def plot_age_checks(
     # Figure 06: q is a frequency among valid paired fits, not correctness.
     fig, axes = plt.subplots(len(processes_order), len(methods), figsize=(18, 10),
                              sharex=True, sharey=True, squeeze=False)
+    add_panel_labels(axes, x=-0.065)
     for row, process in enumerate(processes_order):
         for column, method in enumerate(methods):
             ax = axes[row, column]
@@ -1306,6 +1313,7 @@ def plot_age_checks(
     state_colors = ["#4682B4", "#FDC086", "#B084CC", "#D9D9D9", "#7FC97F", "#666666"]
     fig, axes = plt.subplots(len(processes_order), len(methods), figsize=(18, 10),
                              sharex=True, sharey=True, squeeze=False)
+    add_panel_labels(axes, x=-0.065)
     for row, process in enumerate(processes_order):
         for column, method in enumerate(methods):
             ax = axes[row, column]
@@ -1350,6 +1358,7 @@ def plot_age_checks(
     diagnostic_labels = age_diagnostics["record"].astype(str).str.replace("_", "\n", regex=False).tolist()
     diagnostic_positions = np.arange(len(age_diagnostics))
     fig, axes = plt.subplots(3, 1, figsize=(14, 10), sharex=True)
+    add_panel_labels(axes, x=-0.065)
     axes[0].bar(diagnostic_positions, age_diagnostics["acceptance_rate"], color="tab:blue", width=0.65)
     axes[0].set_ylim(0, 1.08)
     axes[0].set_ylabel("Accepted / proposed")

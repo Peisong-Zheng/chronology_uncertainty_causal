@@ -133,6 +133,9 @@ def native_fingerprints(result, method, case_label):
 def select_cases():
     """Select a fixed prefix per setting without looking at causal outcomes."""
     settings = json.loads((SOURCE_DIR / "age_comparison_parameters.json").read_text())
+    if "CCM_LIBRARY_SIZE" not in settings:
+        raise ValueError("Prepared experiment lacks explicit CCM_LIBRARY_SIZE. Preserve the legacy outputs "
+                         "and prepare a fresh experiment02 before benchmarking this implementation.")
     for package, saved_version in settings["packages"].items():
         if version(package) != saved_version:
             raise ValueError(f"Prepared experiment package {package} differs from this environment.")
@@ -188,11 +191,10 @@ def fit_case(case, settings):
                 elif method == "LKIF":
                     result = run_lkif(series, max_lag=settings["MAX_LAG"], alpha=settings["ALPHA"])
                 elif method == "CCM":
-                    embedded_rows = len(series) - (settings["CCM_E"] - 1) * abs(settings["CCM_TAU"])
                     result = run_ccm(
                         series, E=settings["CCM_E"], tau=settings["CCM_TAU"],
                         exclusion_radius=settings["CCM_EXCLUSION_RADIUS"],
-                        lib_size=int(settings["CCM_LIBRARY_FRACTION"] * embedded_rows),
+                        lib_size=settings["CCM_LIBRARY_SIZE"],
                         sample=settings["CCM_SAMPLES"], n_surrogates=settings["CCM_SURROGATES"],
                         seed=case["seed"], alpha=settings["ALPHA"], lag_steps=settings["CCM_LAG_STEPS"],
                         n_libraries=settings["CCM_LAG_LIBRARIES"], sign_threshold=settings["CCM_LAG_SIGN_THRESHOLD"],

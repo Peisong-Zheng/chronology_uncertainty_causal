@@ -14,6 +14,7 @@ from matplotlib.lines import Line2D
 import numpy as np
 import pandas as pd
 
+from toolbox.plotting import add_panel_labels
 from toolbox.process import generate_process
 from toolbox.causal import prepare_gpdc_null, run_pcmciplus, run_lkif, run_ccm, run_granger
 
@@ -38,7 +39,7 @@ GPDC_NULL_SAMPLES = 10000      # Native GPDC reference-null draws.
 CCM_E = 3                     # Number of embedding coordinates.
 CCM_TAU = -1                  # Backward embedding interval: 20 years; total history spans 40 years.
 CCM_EXCLUSION_RADIUS = 10      # Exclude neighbors within this many time steps.
-CCM_LIBRARY_FRACTION = 0.80    # Fraction of usable embedded rows in each library.
+CCM_LIBRARY_SIZE = 300         # Embedded states per library, shared by original, null and lag fits.
 CCM_SAMPLES = 10               # Number of random libraries averaged.
 CCM_SURROGATES = 100           # Cut-and-swap null records per tested direction.
 CCM_LAG_STEPS = list(range(-15, 16))  # Target shifts from -300 to +300 years; zero remains in the scan.
@@ -84,7 +85,6 @@ def run_experiment():
         for form in ["linear", "nonlinear"]:
             for gain in GAINS:
                 series = generate_pair(seed, form, gain)
-                library_size = int(CCM_LIBRARY_FRACTION * (len(series) - (CCM_E - 1) * abs(CCM_TAU)))
                 for method in METHODS:
                     print(f"seed={seed}, {form}, K={gain:g}: {method}", flush=True)
                     label = f"s{seed}_{form}_K{gain:g}_{method.replace('+', 'plus')}"
@@ -100,7 +100,7 @@ def run_experiment():
                         elif method == "CCM":
                             result = run_ccm(
                                 series, E=CCM_E, tau=CCM_TAU, exclusion_radius=CCM_EXCLUSION_RADIUS,
-                                lib_size=library_size, sample=CCM_SAMPLES, n_surrogates=CCM_SURROGATES,
+                                lib_size=CCM_LIBRARY_SIZE, sample=CCM_SAMPLES, n_surrogates=CCM_SURROGATES,
                                 seed=seed + 300, alpha=ALPHA, lag_steps=CCM_LAG_STEPS,
                                 n_libraries=CCM_LAG_LIBRARIES,
                                 sign_threshold=CCM_LAG_SIGN_THRESHOLD,
@@ -168,9 +168,10 @@ def summarize_rankings(results):
     return pd.DataFrame(rows)
 
 
-def plot_strength_scores(results):
+def plot_strength_scores(results, ccm_library_size=CCM_LIBRARY_SIZE):
     """Show each paired record, with the same vertical scale within a method."""
     fig, axes = plt.subplots(2, 4, figsize=(14, 8), sharex=True, sharey="col")
+    add_panel_labels(axes, x=-0.065)
     score_labels = ["Max. GPDC statistic", "Max. |normalized information flow|",
                     "Original Tp=0 skill (rho)", "Log residual variance ratio"]
     for column, method in enumerate(METHODS):
@@ -212,7 +213,7 @@ def plot_strength_scores(results):
                Line2D([], [], color="black", marker="D", markerfacecolor="#7FC97F", ls="none", label="Unresolved evidence"),
                Line2D([], [], color="0.4", marker="X", ls="none", label="CCM lag failed; score retained")]
     fig.legend(handles=handles, loc="lower center", ncol=4, bbox_to_anchor=(0.5, 0.035), frameon=False, fontsize=8)
-    fig.suptitle("Native scores versus known coupling: original uniform records", fontsize=14)
+    fig.suptitle(f"Native scores versus known coupling: original uniform records; CCM L={ccm_library_size}", fontsize=14)
     fig.text(0.5, 0.015, "Each line follows one paired realization. CCM keeps rho0 for every successful original fit, including unresolved or failed lag checks. Scores do not estimate K.",
              ha="center", fontsize=9)
     fig.tight_layout(rect=(0, 0.13, 1, 0.95))
@@ -225,7 +226,7 @@ def check_saved_results(results):
     names = ["SEEDS", "GAINS", "DURATION", "DT", "TRUE_LAG", "MEMORY_X", "MEMORY_Y",
              "BACKGROUND_X", "BACKGROUND_Y", "BURN_TIMESCALES", "ANALYSIS_OLD", "ANALYSIS_YOUNG",
              "MAX_LAG", "GC_ORDER", "ALPHA", "GPDC_NULL_SAMPLES", "CCM_E", "CCM_TAU",
-             "CCM_EXCLUSION_RADIUS", "CCM_LIBRARY_FRACTION", "CCM_SAMPLES", "CCM_SURROGATES",
+             "CCM_EXCLUSION_RADIUS", "CCM_LIBRARY_SIZE", "CCM_SAMPLES", "CCM_SURROGATES",
              "CCM_LAG_STEPS", "CCM_LAG_LIBRARIES", "CCM_LAG_SIGN_THRESHOLD"]
     for name in names:
         if saved.get(name) != globals()[name]:

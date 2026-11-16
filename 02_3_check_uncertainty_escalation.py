@@ -22,6 +22,7 @@ from threadpoolctl import threadpool_limits
 from toolbox.observation import make_age_uncertainty, simulate_observations, draw_age_ensemble
 from toolbox.causal import resample_pair, run_pcmciplus, run_lkif, run_ccm, run_granger, prepare_gpdc_null
 from toolbox.evaluation import summarize_ensemble
+from toolbox.plotting import add_panel_labels
 
 
 RUN_CAUSAL = True             # False redraws existing summaries without preparing or fitting data.
@@ -56,7 +57,7 @@ GPDC_OPTIMIZE_KERNEL = False  # Keep the fixed native kernel used by the exact-a
 CCM_E = 3                   # Embedding dimension; three coordinates.
 CCM_TAU = -1                # Backward embedding interval: 20 years, 40-year total history.
 CCM_EXCLUSION_RADIUS = 10   # Exclude temporal neighbors within 200 years.
-CCM_LIBRARY_FRACTION = 0.80  # Fraction of usable embedded points in each random library.
+CCM_LIBRARY_SIZE = 300       # Embedded states per library, shared by original, null and lag fits.
 CCM_SAMPLES = 10            # Libraries averaged for the original Tp=0 CCM test.
 CCM_SURROGATES = 100         # Random cut-and-swap null records per direction.
 CCM_LAG_STEPS = list(range(-15, 16))  # Fixed -300 to +300-year scan; boundary peaks remain unresolved.
@@ -74,6 +75,22 @@ PROCESSES = ["linear", "nonlinear", "independent"]
 LEVELS = [1, 2, 3, 4]          # X and Y always share one level index; no cross-level pairing.
 AGE_KINDS = ["C", "L", "E", "J"]
 PAIR_NAMES = [f"{x}-{y}" for x in AGE_KINDS for y in AGE_KINDS]
+
+
+def replace_output(temporary, target, timeout=5.0):
+    """Keep atomic commits, retrying short Windows sharing/access conflicts."""
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            temporary.replace(target)
+            return
+        except PermissionError as error:
+            # Readers, indexing or antivirus can briefly deny file replacement.
+            # Retry only the commit; never repeat a scientific calculation here.
+            remaining = deadline - time.monotonic()
+            if getattr(error, "winerror", None) not in {5, 32, 33} or remaining <= 0:
+                raise
+            time.sleep(min(0.05, remaining))
 
 
 def execution_environment():
@@ -190,12 +207,12 @@ def check_reference():
     source_pairs = len(PAIR_NAMES) * len(PROCESSES) * N_CAUSAL_MEMBERS
     if status["state"] != "complete" or status["completed_member_pairs"] != source_pairs:
         raise ValueError(f"Run experiment02 to completion with the same member count first ({source_pairs} level-2 pairs).")
-    if (source_age.get("analysis_revision") != "native_null_cache_and_ccm_object_reuse_v1"
+    if (source_age.get("analysis_revision") != "native_null_cache_and_ccm_neighbor_reuse_v2"
             or source_age.get("execution_environment") != execution_environment()):
         raise ValueError("Source02 was generated on a different platform/implementation; regenerate it locally.")
     names = ["SEED", "DURATION", "DT", "TRUE_LAG", "ANALYSIS_OLD", "ANALYSIS_YOUNG",
              "MAX_LAG", "GC_ORDER", "ALPHA", "GPDC_NULL_SAMPLES", "GPDC_OPTIMIZE_KERNEL",
-             "CCM_E", "CCM_TAU", "CCM_EXCLUSION_RADIUS", "CCM_LIBRARY_FRACTION",
+             "CCM_E", "CCM_TAU", "CCM_EXCLUSION_RADIUS", "CCM_LIBRARY_SIZE",
              "CCM_SAMPLES", "CCM_SURROGATES", "CCM_LAG_STEPS", "CCM_LAG_LIBRARIES",
              "CCM_LAG_SIGN_THRESHOLD"]
     for name in names:
@@ -426,9 +443,8 @@ def analyze_member(job):
                 elif method == "LKIF":
                     result = run_lkif(series, max_lag=MAX_LAG, alpha=ALPHA)
                 elif method == "CCM":
-                    library_size = int(CCM_LIBRARY_FRACTION * (len(series) - (CCM_E - 1) * abs(CCM_TAU)))
                     result = run_ccm(series, E=CCM_E, tau=CCM_TAU,
-                        exclusion_radius=CCM_EXCLUSION_RADIUS, lib_size=library_size,
+                        exclusion_radius=CCM_EXCLUSION_RADIUS, lib_size=CCM_LIBRARY_SIZE,
                         sample=CCM_SAMPLES, n_surrogates=CCM_SURROGATES, seed=SEED + 300, alpha=ALPHA,
                         lag_steps=CCM_LAG_STEPS, n_libraries=CCM_LAG_LIBRARIES,
                         sign_threshold=CCM_LAG_SIGN_THRESHOLD)
@@ -472,7 +488,7 @@ def analyze_member(job):
     edges["result_origin"] = str(path.relative_to(ROOT))
     temporary = path.with_suffix(".partial.csv")
     edges.to_csv(temporary, index=False)
-    temporary.replace(path)
+    replace_output(temporary, path)
     (DATA_DIR / f"{label}_method_diagnostics.json").write_text(json.dumps(diagnostics, indent=2), encoding="utf-8")
     return edges
 
@@ -520,7 +536,7 @@ def save_progress(tables, state, current_level=None, error=""):
     path = DATA_DIR / "member_results.csv"
     temporary = path.with_suffix(".partial.csv")
     members.to_csv(temporary, index=False)
-    temporary.replace(path)
+    replace_output(temporary, path)
     pair_counts = members[["level", "pair", "process", "member"]].drop_duplicates().groupby("level").size()
     per_level = len(PAIR_NAMES) * len(PROCESSES) * N_CAUSAL_MEMBERS
     completed = int(pair_counts.sum())
@@ -534,7 +550,7 @@ def save_progress(tables, state, current_level=None, error=""):
     path = DATA_DIR / "run_status.json"
     temporary = path.with_suffix(".partial.json")
     temporary.write_text(json.dumps(status, indent=2), encoding="utf-8")
-    temporary.replace(path)
+    replace_output(temporary, path)
     return members
 
 
@@ -549,7 +565,7 @@ def main():
     parameters["reference_settings"] = reference
     parameters["packages"] = reference["age_settings"]["packages"]
     parameters["execution_environment"] = execution_environment()
-    parameters["analysis_revision"] = "native_null_cache_and_ccm_object_reuse_v1"
+    parameters["analysis_revision"] = "native_null_cache_and_ccm_neighbor_reuse_v2"
     parameters["interpretation"] = "One process realization per form; observation-centered chronologies. Within-record support is not calibrated accuracy."
     parameters["reuse"] = "Read completed level2 from local experiment02; resume complete same-configuration members in other levels."
     parameter_path = DATA_DIR / "parameters.json"
@@ -663,6 +679,7 @@ def plot_uncertainty_envelopes(scenarios):
              "J intervals are 2.8 kyr wide; coverage is their total width / 28 kyr. "
              "SD is not an error bound, and levels do not imply equal total uncertainty across types.",
              ha="center", fontsize=9)
+    add_panel_labels(axes)
     fig.tight_layout(rect=(0, 0.055, 1, 0.92))
     for extension in ["png", "pdf"]:
         fig.savefig(FIGURE_DIR / f"00_uncertainty_envelopes.{extension}", dpi=180)
@@ -782,7 +799,7 @@ def plot_results(summaries, scenarios, *, note=""):
         fig.text(0.5, 0.935, level_text, ha="center", fontsize=9)
         fig.text(0.5, 0.918,
                  f"J peak SD stays 10 yr; coupled-model true lag = {1000 * TRUE_LAG:g} yr; "
-                 f"{N_CAUSAL_MEMBERS} requested chronology members per scenario; CCM lag screening enabled.",
+                 f"{N_CAUSAL_MEMBERS} requested chronology members per scenario; CCM L={CCM_LIBRARY_SIZE}, lag screening enabled.",
                  ha="center", fontsize=9)
         handles = [
             Line2D([], [], marker="^", color="none", markerfacecolor="#33AA66",
@@ -808,6 +825,7 @@ def plot_results(summaries, scenarios, *, note=""):
         fig.text(0.5, 0.012,
                  "These are chronology-ensemble summaries for one record per process, not calibrated accuracy estimates across independent climate histories.",
                  ha="center", fontsize=8.5)
+        add_panel_labels(axes)
         fig.subplots_adjust(left=0.065, right=0.90, bottom=0.105, top=0.885, hspace=0.37, wspace=0.30)
         for extension in ["png", "pdf"]:
             fig.savefig(FIGURE_DIR / f"{filename}.{extension}", dpi=180)

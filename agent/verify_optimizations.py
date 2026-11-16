@@ -1,4 +1,4 @@
-"""Check native GPDC caching and CCM object reuse on this computer.
+"""Check native GPDC caching and CCM neighbor reuse on this computer.
 
 Run ``python agent/verify_optimizations.py`` from the project root before a large Windows experiment.
 This uses the complete 100-library, 31-lag CCM screen on two 1401-point
@@ -64,7 +64,7 @@ GPDC_NULL_SAMPLES = 10000       # Native GPDC reference-null draws.
 CCM_E = 3                      # Embedding dimension.
 CCM_TAU = -1                   # Historical embedding interval, in steps.
 CCM_EXCLUSION_RADIUS = 10       # Neighbor exclusion radius, in steps.
-CCM_LIBRARY_FRACTION = 0.80     # Fraction of embedded rows in each random library.
+CCM_LIBRARY_SIZE = 300         # Embedded states per library, matching new production settings.
 CCM_SAMPLES = 10               # Libraries averaged by the original Tp=0 test.
 CCM_SURROGATES = 100            # Cut-and-swap surrogates for each direction.
 CCM_LAG_STEPS = list(range(-15, 16))  # All 31 target shifts, from -300 to +300 yr.
@@ -170,11 +170,10 @@ def check_pcmci(series, cache_path, settings):
 
 def check_ccm(series):
     """Compare all 100 x 31 x 2 lag scores and resulting directional decisions."""
-    embedded_rows = len(series) - (CCM_E - 1) * abs(CCM_TAU)
     start = time.perf_counter()
     original = run_ccm(
         series, E=CCM_E, tau=CCM_TAU, exclusion_radius=CCM_EXCLUSION_RADIUS,
-        lib_size=int(CCM_LIBRARY_FRACTION * embedded_rows), sample=CCM_SAMPLES,
+        lib_size=CCM_LIBRARY_SIZE, sample=CCM_SAMPLES,
         n_surrogates=CCM_SURROGATES, seed=METHOD_SEED, alpha=ALPHA, lag_steps=None,
     )
     original_seconds = time.perf_counter() - start

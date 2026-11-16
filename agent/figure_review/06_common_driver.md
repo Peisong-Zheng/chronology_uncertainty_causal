@@ -1,0 +1,61 @@
+﻿# Common-driver experiment: figure captions
+
+**System names (10 November 2026).** The figures use **Common driver only** and **Common driver + direct X to Y**. Tables abbreviate these as **Common only** and **Common + direct**. They are two generating systems, not labels for a statistical null and alternative hypothesis. Historical `h0_common_driver` / `h1_direct` file keys are retained so saved inputs, native results and resume identities remain unchanged.
+
+These captions accompany the six figures from `03_check_common_driver.py`. All figures compare a fixed linear system with intrinsic memories of 500 years for Z and 200 years for X and Y. Each variable has unit unforced background standard deviation; innovation SDs are scaled to its autoregressive coefficient. The prescribed long-run gains are K_ZX=K_ZY=2, and K_XY is zero in Common only or one in Common + direct; every direct cross-variable term uses a 20-year delay. The two structures use paired innovations, sampling locations and chronology draws.
+
+The accurate-age category in the result figures is the irregular-sampling accurate-age reference. The separate original-uniform reference remains in the saved tables. Each accurate category contains three process histories, whereas each perturbed category contains ten chronology members per history, giving thirty requested inputs. These descriptive pooled fractions do not constitute estimates from thirty independent histories and are not the within-history directional support q. C-type proposal SD is 40 years; it is not a bound or the measured relative error between records. No seed-specific marker shapes are used.
+
+## 00_design_and_inputs
+
+**Panel mapping:** (a,b) Prescribed Common only and Common + direct graphs; (c,d) accurate-age inputs from the first listed process seed; (e) the change in inputs when only Z's chronology is perturbed; (f) the chronology comparison matrix.
+
+**Caption.** A controlled test of whether uncertain dating undermines adjustment for a common driver. Common only contains Z to X and Z to Y, whereas Common + direct adds X to Y; self-memory, long-run gains and equation delays are shown explicitly. Accurate-age X, Y and Z curves use their unforced background standard-deviation units and a shared vertical scale in the fixed 17-13 kyr BP illustration window. Panel (e) subtracts each accurate-age input from its counterpart with only Z's chronology perturbed, demonstrating that X and Y remain unchanged over the full analysis window; this ordinate is a value difference after resampling, not an age error. Panel (f) distinguishes accurate ages, uncertainty in Z alone, uncertainty in X and Y, and uncertainty in all three records. Different records receive independent C-type clocks, while each record's clock is reused across the two structures.
+
+**Reading note.** The plotted window and first chronology member are specified without selecting for a favorable causal result. Older BP ages are on the left. The curves illustrate inputs; the prescribed equations establish the causal truth.
+
+## 01_effect_of_conditioning
+
+**Panel mapping:** Top row Common only, bottom row Common + direct; columns PCMCI+, LKIF and GC.
+
+**Caption.** Directional detection before and after including observed Z in the analysis. Blue and orange indicate X to Y and Y to X; open circles use the pairwise X,Y analysis and filled circles use the conditional X,Y,Z analysis, with short connectors pairing the two analyses within each chronology condition. Fractions divide the detected count by all requested inputs, including unavailable decisions; tick annotations give counts in pairwise-to-conditional order and identify unresolved (U) and unavailable (F, including pending) case counts as pairwise/conditional. Neither X/Y direction is prescribed in Common only, whereas X to Y alone is prescribed in Common + direct. A retained direction can coexist with unresolved evidence, which is counted separately here and assigned its own state in Figure 02. The plots describe the fixed estimator configurations and three process histories; they do not turn chronology-member support into a calibrated probability of causal correctness.
+
+**Reading note.** The short segments join two discrete analysis results; they are not interpolation. This figure measures X-Y directional decisions, not recovery of the two true edges out of Z. Compare the accurate-age open and filled points to see the benefit or limitation of including Z before adding chronology uncertainty. Then compare filled points across conditions, especially the Z-only condition, where the X,Y inputs are unchanged. Pairwise GC and the full conditional VAR need not have the same marginal model adequacy, so their accurate-age contrast is part of the baseline evidence.
+
+## 02_xy_decision_states
+
+**Panel mapping:** Top row Common only, bottom row Common + direct; columns PCMCI+, LKIF and GC. Each chronology group pairs the X,Y analysis (P) with the X,Y,Z analysis (C).
+
+**Caption.** Complete X-Y decision states distinguish missing directions, additional directions and unresolved evidence. Stacked bars show neither direction, X to Y only, Y to X only, both directions, unresolved evidence and unavailable decisions, using the same requested-input denominators as Figure 01; segment labels give case counts. Unresolved evidence takes precedence over arrow combinations in this display, because a retained arrow can coexist with an unresolved contemporaneous relation, while unavailable states include failed or pending decisions. The correct X-Y state is neither direction in Common only and X to Y only in Common + direct, as indicated above each panel. These are X-Y subgraph outcomes rather than complete three-node graph recovery; all four remaining directional tests involving Z are retained in the saved conditional results.
+
+**Reading note.** A smaller directional detection fraction in Figure 01 does not reveal whether a result became absent, reversed or unresolved. This figure identifies those different outcomes without removing difficult cases from the denominator. A nonsignificant estimate does not establish general physical absence outside this known model.
+
+## 03_pairwise_ccm_evidence
+
+**Panel mapping:** Common only left and Common + direct right. Top row raw significance and lag-screened retention; bottom row native Tp=0 cross-map skill.
+
+**Caption.** Pairwise CCM evidence is reported separately because the existing CCM procedure does not condition on Z. Blue and orange identify X to Y and Y to X; upper panels connect the requested-input fractions significant in the original test (open circles) with those retained after the lag screen (filled circles), with raw-to-screened counts and unresolved/unavailable case counts beneath each group. In the lower panels, blue X-to-Y evidence is the correlation between X and its reconstruction from Y's embedding; orange Y-to-X evidence reconstructs Y from X's embedding. Small dots show each finite successful original Tp=0 rho, with larger dots for pooled medians and whiskers for empirical-distribution interquartile ranges; counts give usable/requested scores, and the intervals are descriptive rather than confidence intervals. Quartiles use the inverse empirical CDF so that simply repeating the same three baseline values ten times cannot change the displayed IQR. Successful original evidence remains available if a later lag screen is unresolved or fails, and neither scanned peak rho nor the peak lag replaces the original native score. Changing only Z's chronology leaves the X,Y inputs unchanged, providing a paired invariance check for this procedure. The CCM results should therefore be read as outcomes of the pairwise workflow rather than conditional direct-edge tests comparable to the full three-variable analyses.
+
+**Reading note.** Upper counts explicitly separate the original test from directional screening. Each small dot in panels (c,d) is one input's original Tp=0 rho, already averaged over its ten native random libraries of length 300; it is not a single library or one of the 100 lag-screen curves. Accurate ages therefore contribute three dots per direction, and a perturbed category thirty. Whiskers summarize variation across these input scores, not the uncertainty of each individual rho. Score changes can occur without crossing a significance threshold, and a high score is not itself evidence that a direct X-Y edge is present after accounting for Z.
+
+
+## 04_conditioning_gain
+
+**Panel mapping:** (a) Common driver only; (b) Common driver + direct X to Y.
+
+**Caption.** Change in the fraction of fully correct X-Y decisions after including observed Z. Within each chronology condition, the three bars represent PCMCI+, LKIF and GC. The ordinate is the conditional minus pairwise exact X-Y recovery fraction, multiplied by 100 and reported in percentage points. A positive bar means that including Z yields more correct X-Y decisions; a negative bar means fewer. Exact recovery requires neither X-Y direction in the common-driver-only system, and only X to Y in the direct-link system, with no unresolved evidence. Unavailable and pending cases remain in the requested denominator and cannot count as successes. The accurate-age reference has three requested inputs; each perturbed condition has thirty inputs from three process/clock blocks with ten members each. Both analyses use the same cases, so the difference is paired. The bars describe net changes: equal gains and losses in individual cases can cancel. CCM is absent because this implementation has no conditional CCM counterpart.
+
+**Definition.** For case j, let I_j be one if its entire X-Y decision is correct and resolved, and zero otherwise. Then
+
+$$R_{XY}=\frac{1}{N_{\mathrm{requested}}}\sum_j I_j,\qquad
+\Delta R_{XY}=100\left(R_{XY}^{\mathrm{conditional}}-R_{XY}^{\mathrm{pairwise}}\right).$$
+
+**Reading note.** A gain of +20 percentage points is not a 20% relative increase. In Common only with only Z uncertain, PCMCI+ changes from 10/30 correct pairwise decisions to 20/30 conditional decisions: the bar is +33.3 percentage points. This is the benefit of including the available Z within that chronology condition, not the effect of adding chronology error relative to accurate ages. Complete three-node graph recovery is a different outcome and remains in the saved results. Figure 01 retains the underlying directional evidence and Figure 02 the failure categories.
+
+## 05_xy_recovery_comparison
+
+**Panel mapping:** Top row Common driver only, bottom row Common driver + direct X to Y. Left column uses pairwise X,Y analyses; right column uses conditional X,Y,Z analyses.
+
+**Caption.** Exact X-Y recovery provides a common scalar outcome for comparing methods in both generating systems. Every curve reports R_XY, defined above, for one method across the four chronology assignments. Higher values mean more inputs with the complete correct X-Y decision. Colors, line styles and marker shapes distinguish methods, not process seeds. CCM appears only in the pairwise column and uses its final lag-screened decisions. The axes share the same percentage scale. Small horizontal offsets separate overlapping markers without changing their values or condition assignments. Connecting segments guide the eye across categorical conditions; the conditions are not a continuous or ordered uncertainty-severity axis. Compact tables report correct/requested counts. Unresolved, failed and pending cases are unsuccessful for this strict recovery measure but retain distinct states in Figure 02. These descriptive fractions are not confidence intervals or calibrated causal probabilities, and thirty chronology inputs do not represent thirty independent process histories.
+
+**Reading note.** This scalar deliberately gives no partial credit for retaining one correct arrow while adding another wrong arrow. It also does not distinguish an unresolved decision from a definite wrong graph; use Figure 02 for that diagnosis. F1 is not used because the Common only X-Y truth has no positive edge, making a perfect no-edge prediction a 0/0 F1 case. The two systems are shown separately instead of hiding their different successes and failures in one averaged ranking. Rates concern only X-Y; they do not measure recovery of the Z-related edges.

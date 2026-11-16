@@ -2,7 +2,11 @@
 /tmp/
 /.venv/
 /.venv-gpu/
+/.venv-gpdc/
 /venv/
+
+# Local Chinese reading notes; keep this directory out of version control.
+/Note/
 
 # Python and notebook caches.
 __pycache__/
@@ -16,6 +20,10 @@ __pycache__/
 /data/*
 !/data/README.md
 # /figures/*
+/figures/02_5_compare_gpdc_backends/
+/figures/02_6_check_ccm_library_length/
+/figures/02_7_check_ccm_neighbor_reuse/
+/figures/02_8_check_memory_sensitivity/
 !/figures/README.md
 
 # Local credentials and editor metadata are not project inputs.

@@ -7,6 +7,8 @@ GPDC cache preparation helper writes the package's reusable null distribution.
 
 from importlib.metadata import version
 from pathlib import Path
+from types import SimpleNamespace
+import importlib
 import json
 import platform
 import warnings
@@ -563,6 +565,126 @@ def summarize_ccm_lag(
     return {"edges": edges, "diagnostics": diagnostics, "raw": raw}
 
 
+def scan_ccm_reusing_neighbors(
+    series, *, E, tau, exclusion_radius, library_size, lag_steps, library_seeds,
+):
+    """Return paired native CCM lag curves with bounded neighbor-query reuse.
+
+    library_size counts embedded states, tau/lag_steps/exclusion_radius use
+    grid steps, and library_seeds supplies one positive seed per random draw.
+    The same common anchors and seeds are used at every target shift. Only
+    exact SciPy KDTree query outputs are reused; native sampling, temporal
+    exclusion, weights, predictions and Pearson correlations are unchanged.
+
+    This implementation follows PyEDM 2.5.7. Its temporary module patch and
+    native worker globals require sequential calls within each process;
+    outer process pools are supported, concurrent threads are not. The
+    cache holds one draw's geometry and is released on exit. Native-call
+    failures retain NaN curves and explicit scan_errors instead of hiding
+    failed draws or discarding successful original CCM/null calculations.
+    """
+    import pyEDM
+
+    values, _ = _series_values(series)
+    lags = _ccm_lag_grid(lag_steps)
+    integers = [E, tau, exclusion_radius, library_size]
+    if not all(isinstance(value, (int, np.integer)) for value in integers):
+        raise ValueError("CCM dimensions, offsets and library size must be integers.")
+    if E < 1 or tau >= 0 or exclusion_radius < 0:
+        raise ValueError("Require E>=1, tau<0 and a nonnegative exclusion radius.")
+    seeds = np.asarray(library_seeds)
+    if (seeds.ndim != 1 or len(seeds) < 1
+            or not np.issubdtype(seeds.dtype, np.integer) or np.any(seeds < 1)):
+        raise ValueError("library_seeds must be a nonempty vector of positive integers.")
+    if version("pyEDM") != "2.5.7":
+        raise RuntimeError("CCM neighbor reuse requires the validated PyEDM 2.5.7 implementation.")
+
+    history = (E - 1) * abs(tau)
+    anchors = np.arange(max(history, -int(lags[0])), len(values) - int(lags[-1]), dtype=int)
+    if not E + 2 <= library_size <= len(anchors):
+        raise ValueError("Library must fit the common anchors and contain at least E+2 states.")
+    valid_lib = np.zeros(len(values), dtype=bool)
+    valid_lib[anchors] = True
+    data = series[["time", "x", "y"]]
+    native_module = importlib.import_module("pyEDM.CCM")
+    native_tree = native_module.KDTree
+    query_cache = {}
+    stats = {"query_requests": 0, "native_searches": 0, "cache_hits": 0,
+             "peak_cache_entries": 0, "peak_query_array_bytes": 0, "peak_key_bytes": 0}
+
+    def array_key(array):
+        contiguous = np.ascontiguousarray(array)
+        return contiguous.shape, contiguous.dtype.str, contiguous.tobytes()
+
+    def cached_tree(library):
+        library_key = array_key(library)
+
+        def query(points, k):
+            stats["query_requests"] = stats["query_requests"] + 1
+            query_key = array_key(points)
+            key = (library_key, query_key, int(k))
+            if key in query_cache:
+                stats["cache_hits"] = stats["cache_hits"] + 1
+                return query_cache[key]
+            # Build and query only on a miss; all later estimator work stays native.
+            result = native_tree(library).query(points, k=k)
+            for array in result:
+                array.flags.writeable = False
+            query_cache[key] = result
+            stats["native_searches"] = stats["native_searches"] + 1
+            stats["peak_cache_entries"] = max(stats["peak_cache_entries"], len(query_cache))
+            query_bytes = sum(array.nbytes for pair in query_cache.values() for array in pair)
+            key_bytes = sum(len(item[0][2]) + len(item[1][2]) for item in query_cache)
+            stats["peak_query_array_bytes"] = max(stats["peak_query_array_bytes"], query_bytes)
+            stats["peak_key_bytes"] = max(stats["peak_key_bytes"], key_bytes)
+            return result
+
+        # Deliberately accept only the constructor/query arguments used by this version.
+        return SimpleNamespace(query=query)
+
+    rho = np.full((len(seeds), len(lags), 2), np.nan)
+    models = [None] * len(lags)
+    errors = []
+    try:
+        native_module.KDTree = cached_tree
+        for library, library_seed in enumerate(seeds):
+            query_cache.clear()
+            for position, lag in enumerate(lags):
+                model = models[position]
+                try:
+                    if model is None:
+                        model = pyEDM.CCM(
+                            dataFrame=data, columns="y", target="x", E=E, tau=tau,
+                            Tp=int(lag), exclusionRadius=exclusion_radius,
+                            libSizes=[library_size], sample=1, seed=int(library_seed),
+                            validLib=valid_lib, parallel=False, includeData=False,
+                            showPlot=False, returnObject=True,
+                        )
+                        if (not np.array_equal(model.idx_col, anchors)
+                                or not np.array_equal(model.idx_tgt, anchors)):
+                            raise ValueError("Native CCM changed the common anchor set.")
+                        models[position] = model
+                    else:
+                        model.Project(sample=1, seed=int(library_seed), parallel=False, includeData=False)
+                    native = model.libMeans
+                    if int(native["LibSize"].iloc[0]) != library_size:
+                        raise ValueError("Native CCM changed the requested library size.")
+                    rho[library, position, :] = [native["y:x"].iloc[0], native["x:y"].iloc[0]]
+                except Exception as error:
+                    models[position] = None
+                    errors.append({"library": library, "lag_steps": int(lag),
+                                   "reason": f"{type(error).__name__}: {error}"})
+    finally:
+        native_module.KDTree = native_tree
+        query_cache.clear()
+    errors.sort(key=lambda item: (item["library"], item["lag_steps"]))
+    return {
+        "rho": rho, "anchors": anchors, "library_seeds": seeds.copy(),
+        "lag_steps": lags.copy(), "directions": np.array(["x_to_y", "y_to_x"]),
+        "scan_errors": errors, "cache_stats": stats,
+    }
+
+
 def filter_ccm_by_lag(
     series, ccm_result, *, lag_steps, n_libraries=100, sign_threshold=0.90, seed=1,
 ):
@@ -583,8 +705,6 @@ def filter_ccm_by_lag(
     It is inspired by Ye et al. (2015), doi:10.1038/srep14750, and Van Nes et
     al. (2015), doi:10.1038/nclimate2568, not their complete model-null test.
     """
-    import pyEDM
-
     values, dt = _series_values(series)
     lags = _ccm_lag_grid(lag_steps)
     if not isinstance(n_libraries, (int, np.integer)) or n_libraries < 1:
@@ -602,45 +722,21 @@ def filter_ccm_by_lag(
     anchor_start = max(history, -int(lags[0]))
     anchor_stop = len(values) - 1 - int(lags[-1])
     anchors = np.arange(anchor_start, anchor_stop + 1, dtype=int)
-    valid_lib = np.zeros(len(values), dtype=bool)
-    valid_lib[anchors] = True
     library_seeds = np.random.default_rng(seed).integers(1, 2**31 - 1, size=n_libraries)
     rho = np.full((n_libraries, len(lags), 2), np.nan)
     errors = []
     if not E + 2 <= library_size <= len(anchors):
         errors.append({"reason": "library_does_not_fit_common_anchors", "n_common_anchors": len(anchors)})
     else:
-        data = series[["time", "x", "y"]]
-        # A fixed lag has fixed embeddings and target alignment. Reuse the
-        # native object while keeping every original library seed and curve.
-        # Keep process-level parallelism outside this function: pyEDM's
-        # sequential Project uses module-level worker arrays, not thread-local state.
-        for position, lag in enumerate(lags):
-            model = None
-            for library, library_seed in enumerate(library_seeds):
-                try:
-                    if model is None:
-                        model = pyEDM.CCM(
-                            dataFrame=data, columns="y", target="x", E=E, tau=tau,
-                            Tp=int(lag), exclusionRadius=exclusion_radius,
-                            libSizes=[library_size], sample=1, seed=int(library_seed),
-                            validLib=valid_lib, parallel=False, includeData=False, showPlot=False,
-                            returnObject=True,
-                        )
-                    else:
-                        model.Project(sample=1, seed=int(library_seed), parallel=False, includeData=False)
-                    native = model.libMeans
-                    if int(native["LibSize"].iloc[0]) != library_size:
-                        raise ValueError("Native CCM changed the requested library size.")
-                    rho[library, position, :] = [native["y:x"].iloc[0], native["x:y"].iloc[0]]
-                except Exception as error:
-                    # Preserve successful Tp=0 fits even if this extra scan fails.
-                    model = None
-                    errors.append({
-                        "library": library, "lag_steps": int(lag),
-                        "reason": f"{type(error).__name__}: {error}",
-                    })
-        errors.sort(key=lambda item: (item["library"], item["lag_steps"]))
+        try:
+            scan = scan_ccm_reusing_neighbors(
+                series, E=E, tau=tau, exclusion_radius=exclusion_radius,
+                library_size=library_size, lag_steps=lags, library_seeds=library_seeds,
+            )
+            rho, errors = scan["rho"], scan["scan_errors"]
+        except Exception as error:
+            # An unavailable scan backend must not discard successful Tp=0/null fits.
+            errors.append({"reason": f"{type(error).__name__}: {error}"})
     diagnostics["lag_filter"] = {
         "package_version": version("pyEDM"), "seed": int(seed), "dt_kyr": dt,
         "n_libraries": int(n_libraries), "lib_size": int(library_size),

@@ -1,0 +1,30 @@
+# Isolated Windows Python 3.11 environment for the GPDC/GPDCtorch notebook.
+# Install into .venv-gpdc; do not replace the production .venv packages.
+# Official CUDA 12.4 wheels: https://pytorch.org/get-started/previous-versions/
+--extra-index-url https://download.pytorch.org/whl/cu124
+torch==2.5.1+cu124
+# GPyTorch 1.13 supports Torch >= 2.0; keep its operator dependency explicit.
+# https://github.com/cornellius-gp/gpytorch/blob/v1.13/setup.py
+gpytorch==1.13
+linear-operator==0.5.3
+jaxtyping==0.2.19
+typeguard==2.13.3
+sympy==1.13.1
+mpmath==1.3.0
+
+# Match the CPU scientific packages and distance-correlation implementation.
+numpy==1.26.4
+scipy==1.15.3
+pandas==2.2.3
+scikit-learn==1.6.1
+tigramite==5.2.10.1
+dcor==0.6
+numba==0.68.0
+llvmlite==0.50.0
+threadpoolctl==3.7.0
+matplotlib==3.10.0
+
+# Small notebook execution environment; no JupyterLab server is required.
+ipykernel==6.29.5
+nbformat==5.10.4
+nbclient==0.10.2

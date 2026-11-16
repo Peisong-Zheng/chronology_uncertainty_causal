@@ -31,6 +31,7 @@ import numpy as np
 import pandas as pd
 from threadpoolctl import threadpool_limits
 
+from toolbox.plotting import add_panel_labels
 from toolbox.process import generate_process
 from toolbox.observation import sampling_indices_from_gaps
 from toolbox.causal import resample_pair, prepare_gpdc_null, run_pcmciplus, run_lkif, run_ccm, run_granger
@@ -68,7 +69,7 @@ GPDC_GP_PARAMS = {"optimizer": None}  # Disable kernel hyperparameter optimizati
 CCM_E = 3                    # Embedding dimension.
 CCM_TAU = -1                 # Backward embedding interval in grid steps.
 CCM_EXCLUSION_RADIUS = 10    # Neighbor exclusion, grid steps: 200 years.
-CCM_LIBRARY_FRACTION = 0.8    # Fraction of usable embedded rows in each library.
+CCM_LIBRARY_SIZE = 300        # Embedded states per library, shared by original, null and lag fits.
 CCM_SAMPLES = 10             # Libraries for the original Tp=0 score.
 CCM_SURROGATES = 100         # Cut-and-swap null records per direction.
 CCM_LAG_STEPS = list(range(-15, 16))  # Full -300..300yr scan, grid steps.
@@ -81,7 +82,7 @@ FIGURE_DIR = ROOT / "figures" / STEM
 CACHE_DIR = ROOT / "data/cache/gpdc"
 PROCESSES = ["linear", "nonlinear", "independent"]
 METHODS = ["PCMCI+", "LKIF", "CCM", "GC"]
-IMPLEMENTATION_REVISION = "fixed_gap_paired_sampling_v1"
+IMPLEMENTATION_REVISION = "fixed_gap_paired_sampling_ccm_neighbors_v2"
 
 
 def execution_parameters():
@@ -300,10 +301,9 @@ def call_method(series, method, settings, null_path):
     if method == "LKIF":
         return run_lkif(series, max_lag=settings["MAX_LAG"], alpha=settings["ALPHA"])
     if method == "CCM":
-        embedded_rows = len(series) - (settings["CCM_E"] - 1) * abs(settings["CCM_TAU"])
         return run_ccm(series, E=settings["CCM_E"], tau=settings["CCM_TAU"],
                        exclusion_radius=settings["CCM_EXCLUSION_RADIUS"],
-                       lib_size=int(settings["CCM_LIBRARY_FRACTION"] * embedded_rows),
+                       lib_size=settings["CCM_LIBRARY_SIZE"],
                        sample=settings["CCM_SAMPLES"], n_surrogates=settings["CCM_SURROGATES"],
                        seed=settings["METHOD_SEED"], alpha=settings["ALPHA"],
                        lag_steps=settings["CCM_LAG_STEPS"], n_libraries=settings["CCM_LAG_LIBRARIES"],
@@ -466,6 +466,7 @@ def plot_sampling_designs(originals, clock_metadata, points):
             if column == 0:
                 ax.set_ylabel("Observations / kyr")
     fig.suptitle("Fixed 351 observations and gap multiset; only their age distribution changes")
+    add_panel_labels(axes)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     for extension in ["png", "pdf"]:
         fig.savefig(FIGURE_DIR / f"01_sampling_age_density.{extension}", dpi=180)
@@ -489,6 +490,7 @@ def plot_sampling_designs(originals, clock_metadata, points):
             ax.set_ylabel("Proxy value")
     axes[0, 0].legend(fontsize=8)
     fig.suptitle("Linear process, CV=0.75, mask group 0; exact ages and a common 20-year grid")
+    add_panel_labels(axes)
     fig.tight_layout(rect=(0, 0, 1, 0.94))
     for extension in ["png", "pdf"]:
         fig.savefig(FIGURE_DIR / f"02_sampling_reconstruction.{extension}", dpi=180)
@@ -670,6 +672,7 @@ def plot_sampling_results(results, summaries, contrasts, output_dir):
                 ax.set_xlabel("Observation gap (years)")
     fig.legend(handles=direction_legend, loc="lower center", ncol=2, frameon=False)
     fig.suptitle("Regular sampling density: native scores on the common 20-year analysis grid")
+    add_panel_labels(axes)
     fig.tight_layout(rect=(0, 0.045, 1, 0.96))
     _save_sampling_figure(fig, output_dir, "03_density_native_scores")
 
@@ -759,6 +762,7 @@ def plot_sampling_results(results, summaries, contrasts, output_dir):
     fig.suptitle("Paired sampling effects: points = mask groups; diamonds = median; bars = IQR")
     fig.text(0.5, 0.045, "Asynchrony: (AB + BA − AA − BB)/2. Gradients: synchronous gradient mean − synchronous no-gradient mean. "
              "IQR is not a confidence interval; labels show usable/requested groups when incomplete.", ha="center", fontsize=8)
+    add_panel_labels(axes)
     fig.tight_layout(rect=(0, 0.075, 1, 0.96))
     _save_sampling_figure(fig, output_dir, "05_paired_native_score_contrasts")
 
@@ -789,6 +793,7 @@ def plot_sampling_results(results, summaries, contrasts, output_dir):
     fig.suptitle("CCM raw and screened retention; only cases with usable paired directions count")
     fig.text(0.5, 0.01, "The denominator includes every requested case. P marks pending cases. "
              "Original rho0 and p values remain unchanged by the lag screen.", ha="center", fontsize=9)
+    add_panel_labels(axes)
     fig.tight_layout(rect=(0, 0.035, 1, 0.93))
     _save_sampling_figure(fig, output_dir, "06_ccm_raw_screened_retention")
 
@@ -857,6 +862,7 @@ def plot_sampling_individual_scores(results, output_dir):
     fig.text(0.5, 0.045, "AA/BB use synchronous masks; AB/BA use different X/Y masks. "
              "Labels show usable/requested scores when pending or failed. Successful CCM rho0 survives lag-screen failure. "
              "IQR is not a confidence interval.", ha="center", fontsize=8)
+    add_panel_labels(axes)
     fig.tight_layout(rect=(0, 0.075, 1, 0.96))
     _save_sampling_figure(fig, output_dir, "07_irregular_sampling_native_scores")
 

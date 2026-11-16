@@ -19,8 +19,8 @@ import subprocess
 import sys
 
 
-EXPERIMENT = "02_4_check_sampling_sensitivity.py"  # Current accurate-age sampling sensitivity branch.
-FOLLOWUP_EXPERIMENTS = []                 # Run only this branch; the completed chronology study is separate.
+EXPERIMENT = "04_1_check_tbk_excitation.py"  # 12 accurate-age TBK inputs and three ParCorr controls.
+FOLLOWUP_EXPERIMENTS = []  # Existing main-study outputs remain unchanged.
 NUMERICAL_THREADS = 1                     # Per-process BLAS/OpenMP threads; workers are set in the experiment.
 
 ROOT = Path(__file__).resolve().parents[1]
